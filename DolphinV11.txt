@@ -20836,15 +20836,28 @@ end,
 })
 profiles:AddButton({
 Label = "Delete Selected Config",
-Confirm = true,
 OnClick = function()
 local value = list.Value
-if type(value) ~= "string" or persistence == nil then
+if persistence == nil then
 return
 end
-if report(persistence:DeleteFile(value), "Deleting config") then
+if type(value) ~= "string" or value == "" then
+menu:Notify("Click a config in the list first, then press Delete again")
 return
 end
+local okDelete, result = pcall(function()
+return persistence:DeleteFile(value)
+end)
+if not okDelete then
+menu:Notify({ { Text = "Deleting config failed: " }, { Text = tostring(result) } })
+return
+end
+if report(result, "Deleting config") then
+return
+end
+pcall(function()
+list:Set(nil, true)
+end)
 if stateData ~= nil then
 if stateData.AutoSaveConfigName == value then
 stateData.AutoSaveConfigName = nil
