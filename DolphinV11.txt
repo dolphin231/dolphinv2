@@ -17190,6 +17190,70 @@ patch('library:tween(items[ "tab_holder" ], {Size = dim2(1, -side_width, 1, -81)
 patch("Size = dim2(1, -20, 1, -20);", "Size = dim2(1, 0, 1, 0);")
 patch("page.page.Size = dim2(1, -20, 1, -20)", "page.page.Size = dim2(1, 0, 1, 0)")
 patch('library:tween(data.page, {Size = dim2(1, 0, 1, 0)}, Enum.EasingStyle.Quad, 0.4)', 'data.page.Size = dim2(1, 0, 1, 0)')
+--  Library bug: Save wrote "<dir>/configs/<name>" (no extension, `a .. b or c .. d` precedence), while Load and Delete use "<name>.cfg",
+--  so saved configs could never be loaded or deleted. Rewrite the three buttons with consistent paths and a legacy (no extension) fallback.
+do
+local saveAt = string.find(source, 'section:button({name = "Save"', 1, true)
+local accentAt = string.find(source, 'section:colorpicker({name = "Menu Accent"', 1, true)
+if saveAt ~= nil and accentAt ~= nil and accentAt > saveAt then
+local replacement = [==[
+local function cfg_clean(value)
+    if type(value) ~= "string" then return nil end
+    value = value:gsub("^%s+", ""):gsub("%s+$", ""):gsub("[/\\]", "")
+    if value == "" then return nil end
+    return value
+end
+local function cfg_path(name) return library.directory .. "/configs/" .. name .. ".cfg" end
+local function cfg_legacy_path(name) return library.directory .. "/configs/" .. name end
+local function cfg_notify(text) notifications:create_notification({name = "Configs", info = text}) end
+section:button({name = "Save", callback = function()
+    local name = cfg_clean(flags["config_name_text"]) or cfg_clean(flags["config_name_list"])
+    if not name then cfg_notify("Type a config name first") return end
+    local ok, err = pcall(function() writefile(cfg_path(name), library:get_config()) end)
+    library:update_config_list()
+    cfg_notify(ok and ("Saved config:\n" .. name) or ("Save failed:\n" .. tostring(err)))
+end})
+section:button({name = "Load", callback = function()
+    local name = cfg_clean(flags["config_name_list"])
+    if not name then cfg_notify("Click a config in the list first") return end
+    local path = cfg_path(name)
+    if not isfile(path) then path = cfg_legacy_path(name) end
+    if not isfile(path) then cfg_notify("Config file not found:\n" .. name) return end
+    local ok, err = pcall(function() library:load_config(readfile(path)) end)
+    library:update_config_list()
+    cfg_notify(ok and ("Loaded config:\n" .. name) or ("Load failed:\n" .. tostring(err)))
+end})
+section:button({name = "Delete", callback = function()
+    local name = cfg_clean(flags["config_name_list"])
+    if not name then cfg_notify("Click a config in the list first") return end
+    local removed, failure = false, nil
+    for _, path in {cfg_path(name), cfg_legacy_path(name)} do
+        if isfile(path) then
+            local ok, err = pcall(delfile, path)
+            if ok then removed = true else failure = tostring(err) end
+        end
+    end
+    flags["config_name_list"] = nil
+    library:update_config_list()
+    if removed then cfg_notify("Deleted config:\n" .. name)
+    else cfg_notify("Delete failed:\n" .. (failure or ("no file named " .. name))) end
+end})
+            ]==]
+source = string.sub(source, 1, saveAt - 1) .. replacement .. string.sub(source, accentAt)
+end
+end
+--  Library bug: the keybind mode popup (Hold / Toggle / Always) has no ZIndex, so it is drawn behind the window (the screen gui sorts globally).
+do
+local regionStart = string.find(source, "-- Mode Holder", 1, true)
+local regionEnd = regionStart ~= nil and string.find(source, "function cfg.modify_mode_color", regionStart, true) or nil
+if regionStart ~= nil and regionEnd ~= nil then
+local region = string.sub(source, regionStart, regionEnd - 1)
+region = string.gsub(region, "Parent = library%.items;", "Parent = library.items; ZIndex = 200;", 1)
+region = string.gsub(region, 'Parent = items%[ "dropdown" %];', 'Parent = items[ "dropdown" ]; ZIndex = 200;', 1)
+region = string.gsub(region, "Text = option;", "Text = option; ZIndex = 201;", 1)
+source = string.sub(source, 1, regionStart - 1) .. region .. string.sub(source, regionEnd)
+end
+end
 local chunk, compileError = loadstring(source)
 if chunk == nil then
 error("DolphinV1: Sleepy Hub UI library failed to compile: " .. tostring(compileError))
@@ -62722,7 +62786,7 @@ return je.c
 end
 end
 do -- jf
-local function fn35()local I,W= tbl17 .bG(), tbl17 .aE(); tbl17 .hN();local N,P,a,e,c,E,p,T= tbl17 .h_(), tbl17 .ij(), tbl17 .ip(), tbl17 .n(), tbl17 .iw(), tbl17 .i_(), tbl17 .je(),cloneref(game:GetService("Players")).LocalPlayer;return function(l)if getgenv().KhForceMobileUi==true then W.ForceMobileLayout();end;local t=W.Menu.new({Icon=K.LithiumLogo,Title=string.format("DolphinV1 | Rivals | %s",tostring("Sleepy UI")),Directory="kiciarebuild/rivals",Config=l.ReactiveStoreAdapter,ColorAnimation=l.ColorAnimation,Persistence=I,State=l.GeneralState,StateData=l.GeneralStateData,OnUnload=function()e:Destroy();end});e:Add(t);local I=l.PlayerIdentities;t:SetWatermarkUsername(I:GetPresented(T));e:Connect(I.IdentityChanged,function(W)if W==T then t:SetWatermarkUsername(I:GetPresented(T));end;end);for _n,_f in {{"Combat",P},{"Visuals",E},{"Player",c},{"Automation",N},{"World",p},{"Cosmetics",a}} do local _ok,_e=xpcall(_f[2],function(m) return tostring(m).."\n"..debug.traceback() end,l,t);if not _ok then warn("[DolphinV1] page builder failed (" .. _f[1] .. "): " .. _e);end;end;local _ok2,_e2=xpcall(function() t:AddSettingsTab() end,function(m) return tostring(m).."\n"..debug.traceback() end);if not _ok2 then warn("[DolphinV1] settings tab failed: " .. _e2);end;t:SetVisible(not(l.GeneralStateData.SilentLoad==true),true);end;end
+local function fn35()local I,W= tbl17 .bG(), tbl17 .aE(); tbl17 .hN();local N,P,a,e,c,E,p,T= tbl17 .h_(), tbl17 .ij(), tbl17 .ip(), tbl17 .n(), tbl17 .iw(), tbl17 .i_(), tbl17 .je(),cloneref(game:GetService("Players")).LocalPlayer;return function(l)if getgenv().KhForceMobileUi==true then W.ForceMobileLayout();end;local t=W.Menu.new({Icon=K.LithiumLogo,Title=string.format("DolphinV1 | Rivals | %s",tostring("Early Access")),Directory="kiciarebuild/rivals",Config=l.ReactiveStoreAdapter,ColorAnimation=l.ColorAnimation,Persistence=I,State=l.GeneralState,StateData=l.GeneralStateData,OnUnload=function()e:Destroy();end});e:Add(t);local I=l.PlayerIdentities;t:SetWatermarkUsername(I:GetPresented(T));e:Connect(I.IdentityChanged,function(W)if W==T then t:SetWatermarkUsername(I:GetPresented(T));end;end);for _n,_f in {{"Combat",P},{"Visuals",E},{"Player",c},{"Automation",N},{"World",p},{"Cosmetics",a}} do local _ok,_e=xpcall(_f[2],function(m) return tostring(m).."\n"..debug.traceback() end,l,t);if not _ok then warn("[DolphinV1] page builder failed (" .. _f[1] .. "): " .. _e);end;end;local _ok2,_e2=xpcall(function() t:AddSettingsTab() end,function(m) return tostring(m).."\n"..debug.traceback() end);if not _ok2 then warn("[DolphinV1] settings tab failed: " .. _e2);end;t:SetVisible(not(l.GeneralStateData.SilentLoad==true),true);end;end
 
 tbl17.jf = function()
 local jf = tbl17.cache.jf
