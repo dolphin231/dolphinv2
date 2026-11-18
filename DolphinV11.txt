@@ -20604,6 +20604,8 @@ if self._realized then
 return
 end
 self._realized = true
+
+local okBuild, buildErr = pcall(function()
 local library = tbl17.DolphinLibrary()
 self._library = library
 local window = library:window({
@@ -20657,6 +20659,14 @@ end)
 pcall(function()
 library["items"].Enabled = self.Visible
 end)
+end)
+
+if not okBuild then
+--  Let a future Toggle()/SetVisible() call try to realize the menu again
+--  instead of permanently bricking it after one failed attempt.
+self._realized = false
+reportBuildError("Menu:_realize: " .. tostring(buildErr))
+end
 end
 
 function Menu:_fireOpenRecursive(tab)
